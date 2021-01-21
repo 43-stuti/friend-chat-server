@@ -18,8 +18,8 @@ const io = require('socket.io')(http,{
         origin: '*',
       }
 });
-http.listen(3001, () => {
-    console.log("Listening at :3000...");
+http.listen(process.env.PORT || 5000, () => {
+    console.log("Listening at",process.env.PORT || 5000);
 });
 
 io.on('connection', function(socket) {
