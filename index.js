@@ -23,6 +23,7 @@ http.listen(process.env.PORT || 5000, () => {
 });
 
 io.on('connection', function(socket) {
+    console.log('connected')
     let username;
     if(topic && topic.length) {
         io.to(socket.id).emit('MESSAGE',{
