@@ -1,163 +1,164 @@
-const { HostedModel } = require('@runwayml/hosted-models');
+/*
+ *
+ * This uses code from a THREE.js Multiplayer boilerplate made by Or Fleisher:
+ * https://github.com/juniorxsound/THREE.Multiplayer
+ * And a WEBRTC chat app made by Mikołaj Wargowski:
+ * https://github.com/Miczeq22/simple-chat-app
+ *
+ * Aidan Nelson, April 2020
+ *
+ *
+ */
+
+// express will run our server
 const express = require('express');
 const http = require("http").Server(express);
 const app = express();
-var topic = null;
-const messages = {};
-const onlineUsers = []
-/*const server = app.listen(3001, function() {
-    console.log('server running on port 3001');
-});*/
-const model = new HostedModel({
-    url: "https://friends-7a6294b5.hosted-models.runwayml.cloud/v1/",
-    token: "irM6gNAUSLuqhuPTwgRd8Q==",
-});
 
+// decide on which port we will use
 const io = require('socket.io')(http,{
-    cors: {
-        origin: '*',
-      }
+  cors: {
+      origin: '*',
+    }
 });
 http.listen(process.env.PORT || 5000, () => {
-    console.log("Listening at",process.env.PORT || 5000);
+  console.log("Listening at",process.env.PORT || 5000);
 });
 
-io.on('connection', function(socket) {
-    console.log('connected')
-    let username;
-    if(topic && topic.length) {
-        io.to(socket.id).emit('MESSAGE',{
-            isTopic:true,
-            topic:topic
-        });
-    }
-    socket.on('SEND_MESSAGE', function(data) {
-        if(data.intro) {
-            username = data.user;
-            onlineUsers.push(data);
-            let obj = {
-                intro:true,
-                users:[data]
-            }
-            if(data.fromChat) {
-                obj.fromChat = true;
-            }
-            io.emit('MESSAGE', obj)
-        } else {
-            if(data.isTopic) {
-                topic = data.topic;
-            } else {
-                if(data.fetchUsers) {
-                    let obj = {
-                        intro:true,
-                        users:onlineUsers
-                    }
-                    if(data.fromChat) {
-                        obj.fromChat = true
-                    }
-                    io.to(socket.id).emit('MESSAGE',obj);
-                } else {
-                    if(data.fetchMessages) {
-                        io.to(socket.id).emit('MESSAGE', {
-                            initalLoad:true,
-                            messages:messages['0'],
-                            fromChat:true
-                        })
-                    } else {
-                        let seed = Math.floor(Math.random()*300);
-                        let context = '';
-                        let contextStart = 0;
-                        if(messages['0'] && messages['0'].length) {
-                            let length = messages['0'].length;
-                            if(length-2 >= 0) {
-                                context = context + messages['0'][length-2]['user'] + ': ' + messages['0'][length-2]['message'] + '\n';
-                                contextStart = 2;
-                            } else {
-                                contextStart = 1;
-                            }
-                            context = context + messages['0'][length-1]['user'] + ': ' + messages['0'][length-1]['message'] + '\n';
-                        }
-                        for(let i=0;i<onlineUsers.length;i++) {
-                            let reg = new RegExp(onlineUsers[i].name.toLowerCase(), "g");
-                            data.message = data.message.toLowerCase().replace(reg,onlineUsers[i].user.toLowerCase());
-                            context = context.toLowerCase().replace(reg,onlineUsers[i].user.toLowerCase());
-                        }
-                        let prompt = context + data.character.toLowerCase() + ': ' + data.message + '\n' + data.character.toLowerCase() + ':';
-                        const inputs = {
-                            "prompt": prompt,
-                            "max_characters": 300,
-                            "top_p": 0.9,
-                            "seed": seed
-                        }
-                        model.query(inputs).then(async function(outputs) {
-                            const { generated_text, encountered_end } = outputs;
-                            let splittext = generated_text.split("\n");
-                            let formedstring = '';
-                            let changed = 0;
-                            for(let i=contextStart;i<splittext.length; i++) {
-                                let str = splittext[i].split(':');
-                                if(changed == 0 && str.length >=2 && str[0] ==  data.character.toLowerCase()) {
-                                    changed = 1;
-                                } else {
-                                    if(changed == 1 && str.length >=2 && str[0] !=  data.character.toLowerCase()) {
-                                        changed = 2;
-                                    }
-                                }
 
-                                if(changed == 1 && str.length >=2) {
-                                    formedstring = formedstring + str[1] + ' ';
-                                } else {
-                                    if(changed == 1 && str.length == 1) {
-                                        formedstring = formedstring + str[0] + ' ';
-                                    }
-                                }
-                            }
-                            formedstring = formedstring.trim();
-                            for(let i=0;i<onlineUsers.length;i++) {
-                                let reg = new RegExp(onlineUsers[i].user.toLowerCase(), "g");
-                                formedstring = formedstring.toLowerCase().replace(reg,onlineUsers[i].name.toLowerCase())
-                            }
-                            let chararrar = ['chandler','joey','monica','phoebe','rachel','ross'];
-                            for(let i=0;i<chararrar.length;i++) {
-                                let reg = new RegExp(chararrar[i].toLowerCase(), "g");
-                                formedstring = formedstring.toLowerCase().replace(reg,'a friend')
-                            }
-                            let newdata = {
-                                newMessage:true,
-                                user:data.user, 
-                                message: formedstring,
-                                character:data.character
-                            }
-                            if(!messages['0']) {
-                                messages['0'] = [];
-                            }
-                            messages['0'].push(newdata);
-                            io.emit('MESSAGE', newdata)
-                        })
-                        .catch((err) =>{
-                            console.log('ERR',err)
-                        })
-                        /*io.emit('MESSAGE', data);
-                        if(!messages['0']) {
-                            messages['0'] = [];
-                        }
-                        messages['0'].push(data);*/
-                    }
-                }
-            }
-        }
+// Network Traversal
+// Could also use network traversal service here (Twilio, for example):
+let iceServers = [
+  { url: "stun:stun.l.google.com:19302" },
+  { url: "stun:stun1.l.google.com:19302" },
+  { url: "stun:stun2.l.google.com:19302" },
+  { url: "stun:stun3.l.google.com:19302" },
+  { url: "stun:stun4.l.google.com:19302" },
+];
+let messages = [];
+// an object where we will store innformation about active clients
+let clients = {};
+
+function main() {
+  setupSocketServer();
+
+  setInterval(function() {
+    // update all clients of positions
+    io.sockets.emit("userPositions", clients);
+  }, 10);
+}
+
+main();
+
+function setupSocketServer() {
+  // Set up each socket connection
+  io.on("connection", (client) => {
+    console.log('CONNECCTED')
+    console.log(
+      "User " +
+        client.id +
+        " connected, there are " +
+        io.engine.clientsCount +
+        " clients connected"
+    );
+
+    //Add a new client indexed by their socket id
+    clients[client.id] = {
+      position: [0, 0.5, 0],
+      rotation: [0, 0, 0, 1], // stored as XYZW values of Quaternion
+    };
+
+    // Make sure to send the client their ID and a list of ICE servers for WebRTC network traversal
+    client.emit(
+      "introduction",
+      client.id,
+      io.engine.clientsCount,
+      Object.keys(clients),
+      iceServers
+    );
+
+    // also give the client all existing clients positions:
+    client.emit("userPositions", clients);
+
+    //Update everyone that the number of users has changed
+    io.sockets.emit(
+      "newUserConnected",
+      io.engine.clientsCount,
+      client.id,
+      Object.keys(clients)
+    );
+
+    // whenever the client moves, update their movements in the clients object
+    client.on("move", (data) => {
+      if (clients[client.id]) {
+        clients[client.id].position = data[0];
+        clients[client.id].rotation = data[1];
+      }
     });
-    socket.on('disconnect', function() {
-        let removeIndex = undefined
-       for(let i=0;i<onlineUsers.length;i++) {
-            if(!removeIndex == undefined && onlineUsers[i].user == username) {
-                removeIndex = i;
-            }
-        }
-        onlineUsers.splice(removeIndex,1);
-        io.emit('MESSAGE', {
-            reset:true,
-            users:onlineUsers
-        })
+    
+    client.on("pose_puzzle", (data) => {
+      console.log(data);
+      io.sockets.emit("pose-puzzle", data)
     });
-});
+    client.on("state", (data) => {
+      console.log(data);
+      io.sockets.emit("gameStateUpdate", data)
+    });
+    client.on('send_message',(data) => {
+      messages.push(data);
+      console.log('PING',data)
+      io.sockets.emit('new_message',data);
+    });
+    client.on('diary-puzzle',(data) => {
+      io.sockets.emit('diary-update',data);
+    });
+    client.on('pose-puzzle',(data) => {
+      io.sockets.emit('pose-update',data);
+    })
+    //Handle the disconnection
+    client.on("disconnect", () => {
+      //Delete this client from the object
+      delete clients[client.id];
+      io.sockets.emit(
+        "userDisconnected",
+        io.engine.clientsCount,
+        client.id,
+        Object.keys(clients)
+      );
+      console.log(
+        "User " +
+          client.id +
+          " diconnected, there are " +
+          io.engine.clientsCount +
+          " clients connected"
+      );
+    });
+
+    // from simple chat app:
+    // WEBRTC Communications
+    client.on("call-user", (data) => {
+      console.log(
+        "Server forwarding call from " + client.id + " to " + data.to
+      );
+      client.to(data.to).emit("call-made", {
+        offer: data.offer,
+        socket: client.id,
+      });
+    });
+
+    client.on("make-answer", (data) => {
+      client.to(data.to).emit("answer-made", {
+        socket: client.id,
+        answer: data.answer,
+      });
+    });
+
+    // ICE Setup
+    client.on("addIceCandidate", (data) => {
+      client.to(data.to).emit("iceCandidateFound", {
+        socket: client.id,
+        candidate: data.candidate,
+      });
+    });
+  });
+}
