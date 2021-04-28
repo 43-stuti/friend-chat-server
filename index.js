@@ -96,6 +96,14 @@ function setupSocketServer() {
       }
     });
     
+    client.on("bowl-update", (data) => {
+      console.log(data);
+      io.sockets.emit("bowl-update-socket", data)
+    });
+    client.on("bowl-remove", (data) => {
+      console.log(data);
+      io.sockets.emit("bowl-remove-socket", data)
+    });
     client.on("pose_puzzle", (data) => {
       console.log(data);
       io.sockets.emit("pose-puzzle", data)
